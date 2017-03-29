@@ -181,6 +181,21 @@ instance providers and class providers)
             return ClassZ(use_color_plz=True)
     ```
 
+3.  When your program is first starting, create an Injector and use it to get an instance of your
+    first *injectable class*:
+
+    ```python
+    from pyprovide import Injector
+
+    def main():
+        injector = Injector(MyModule())
+        instance = injector.get_instance(ClassA)
+        instance.do_stuff()
+    ```
+
+    The beauty of this is that ClassA may have some dependencies, and those dependencies may have
+    other dependencies, but this is all handled by PyProvide.
+
 ## Important Notes
 
 As specified a few times above, in PyProvide, **all providers are singleton providers**. The value
