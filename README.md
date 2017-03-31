@@ -144,41 +144,52 @@ instance providers and class providers)
     doesn't need a provider as it can use the *default provider* (but it can still have a provider
     defined).
 
-    If a class has a dependency on an abstract class, it is common that the abstract class's
-    `__init__` is not a decorated class, but its subclasses are. Then, providers can be used to
-    create instances of different subclasses of the abstract class depending on the module that the
-    provider is in.
+    If a class has a dependency on an abstract class, it is common that the abstract class is not
+    a decorated class, but its subclasses are. Then, providers can be used to create instances of
+    different subclasses of the abstract class depending on the module that the provider is in.
 
     As a useful shortcut, if the actual instance returned by a provider is a decorated class, then
-    you can use a class provider instead of an instance provider (which is what is used above).
-    Class providers return class objects themselves, rather than instances of classes.
+    you can use a *class provider* instead of an instance provider (the providers above are instance
+    providers). Class providers return class objects themselves, rather than instances of classes.
 
     ```python
-    from pyprovide import Injectable, Module, class_provider
+    from pyprovide import InjectableClass, Module, class_provider
 
     class MyModule(Module):
         @class_provider()
-        def provide_class_a(self) -> Injectable[ClassA]:
+        def provide_class_a(self) -> InjectableClass(ClassA):
             return SubclassOfClassA
 
-        # The provider above is equivalent to:
+        # That class provider above is equivalent to:
+
         @provider()
         def provide_class_a(self, ...dependencies...) -> ClassA:
             return SubclassOfClassA(...dependencies...)
     ```
 
+    The return type annotation of a class provider is the class that it provides, wrapped in a call
+    to `InjectableClass`. This function returns a special class that ensures type checking is still
+    valid.
+
     Also, remember that the return type annotation of the provider is used when mapping the
     provider in the registry; it is free to return an instance of a subclass.
 
-    To have a provider provide a named dependency, pass the name as an argument to `@provider()`:
+    To have a provider provide a named dependency, pass the name as an argument to `@provider()`
+    or `@class_provider()`:
 
     ```python
-    from pyprovide import Module, provider
+    from pyprovide import InjectableClass, Module, class_provider, provider
 
     class MyModule(Module):
         @provider("ClassZ in color")
-        def provide(self) -> ClassZ:
-            return ClassZ(use_color_plz=True)
+        def provide_class_z_color(self) -> ClassZ:
+            class_z = ClassZ()
+            class_z.use_color_plz()
+            return class_z
+
+        @class_provider("ClassZ in black-and-white")
+        def provide_class_z_bw(self) -> InjectableClass(ClassZ):
+            return ClassZ
     ```
 
 3.  When your program is first starting, create an Injector and use it to get an instance of your
