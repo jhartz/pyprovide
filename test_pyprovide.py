@@ -102,22 +102,31 @@ class ExampleModuleWithClassProviders(Module):
 class TestInvalidProviders(unittest.TestCase):
     def test_provider_without_return_type(self):
         with self.assertRaises(BadProviderError):
-            class ExampleModuleWithInvalidProvider1(Module):
+            class ExampleModuleWithInvalidProvider(Module):
                 @provider()
                 def provider_without_return_type(self):
                     pass
 
     def test_provider_without_param_types(self):
         with self.assertRaises(BadProviderError):
-            class ExampleModuleWithInvalidProvider2(Module):
+            class ExampleModuleWithInvalidProvider(Module):
                 @provider()
                 def provider_without_param_types(self, what, am, i) -> ExampleClass:
                     pass
 
+    def test_inject_decorated_method_in_module(self):
+        class ExampleModuleWithInvalidProvider(Module):
+            @inject()
+            def provider_annotated_with_inject(self):
+                pass
+        with self.assertRaises(BadProviderError):
+            ExampleModuleWithInvalidProvider()
+
 
 class TestDependencyCycle(unittest.TestCase):
     def test_dependency_cycle(self):
-        class Example1: pass
+        class Example1:
+            pass
         class Example2:
             @inject()
             def __init__(self, example1: Example1): pass
