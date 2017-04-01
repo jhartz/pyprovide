@@ -214,6 +214,7 @@ class Module:
 class Injector:
     def __init__(self, *modules: Module) -> None:
         self._provider_registry: Dict[_ProviderKey, _ProviderMethod] = {}
+        self._instance_registry: Dict[_ProviderKey, Any] = {}
         self._added_modules: Set[Module] = set()
 
         duplicate_pairs = self._add_modules(modules)
@@ -260,13 +261,13 @@ class Injector:
         if not isinstance(dependency, type):
             raise DependencyError("Dependency is not a type", dependency_chain, dependency_name)
 
-        # Try to find a provider for the dependency
         provider_key = _ProviderKey(dependency, dependency_name)
-        provider_method: Optional[_ProviderMethod] = None
-        try:
-            provider_method = self._provider_registry[provider_key]
-        except KeyError:
-            pass
+        # See if we have a cached instance of this dependency
+        if provider_key in self._instance_registry:
+            return self._instance_registry[provider_key]
+
+        # Try to find a provider for the dependency
+        provider_method: Optional[_ProviderMethod] = self._provider_registry.get(provider_key)
 
         method_or_class: Union[_ProviderMethod, type, None] = None
         if provider_method is not None:
@@ -282,7 +283,10 @@ class Injector:
             raise DependencyError("Could not find or create provider for dependency",
                                   dependency_chain, dependency_name)
 
-        return self._call_with_dependencies(method_or_class, dependency_chain)
+        instance: Any = self._call_with_dependencies(method_or_class, dependency_chain)
+        # Cache this instance for the future
+        self._instance_registry[provider_key] = instance
+        return instance
 
     def _call_with_dependencies(self, method_or_class: Union[_ProviderMethod, type],
                                 dependency_chain: List[type]) -> Any:

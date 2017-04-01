@@ -134,9 +134,7 @@ class TestInjectionWithDefaultProvider(unittest.TestCase):
         self.assertIsInstance(class_c.class_a, ExampleClassA)
         self.assertIsInstance(class_c.class_b, ExampleClassB)
         self.assertIsInstance(class_c.class_b.class_a, ExampleClassA)
-        # TODO: Singleton-ness not yet enforced
-        # TODO: Uncomment this assertion when it is
-        #self.assertIs(class_c.class_a, class_c.class_b.class_a)
+        self.assertIs(class_c.class_a, class_c.class_b.class_a)
 
 
 if __name__ == "__main__":
