@@ -14,6 +14,11 @@ from pyprovide import \
     class_provider, inject, provider
 
 
+###################################################################################################
+# Injectable classes used in unit tests
+###################################################################################################
+
+
 class ExampleClass:
     pass
 
@@ -57,6 +62,11 @@ class ExampleClassD:
         self.class_c = class_c
 
 
+###################################################################################################
+# Example modules used in unit tests
+###################################################################################################
+
+
 class ExampleModuleWithInstanceProviders(Module):
     @provider()
     def provide_example_class(self) -> ExampleClass:
@@ -69,10 +79,14 @@ class ExampleModuleWithInstanceProviders(Module):
         class_a.is_the_named_one = True
         return class_a
 
-    @provider("Example Class C", class_a="Named Class A")
+    @provider("Named Class C", class_a="Named Class A")
     def provide_named_class_c(self, example_class: ExampleClass, class_a: ExampleClassA,
                               class_b: ExampleClassB) -> ExampleClassC:
-        class_c: ExampleClassC = ExampleClassC(example_class, class_a, class_b)
+        assert isinstance(example_class, ExampleClass)
+        assert isinstance(class_a, ExampleClassA)
+        assert isinstance(class_b, ExampleClassB)
+        class_c: ExampleClassC = ExampleClassC(class_a, class_b)
+        class_c.is_the_named_one = True
         return class_c
 
 
@@ -84,19 +98,26 @@ class ExampleModuleWithClassProviders(Module):
     @class_provider("Named Class A")
     def provide_named_class_a(self) -> InjectableClass[ExampleClassA]:
         class SubclassOfExampleClassA(ExampleClassA):
-            @inject()
-            def __init__(self):
-                super().__init__()
-        SubclassOfExampleClassA.is_the_named_class = True
+            pass
+        SubclassOfExampleClassA.is_the_named_one = True
         return SubclassOfExampleClassA
 
-    @class_provider("Example Class C", class_a="Named Class A")
+    @class_provider("Named Class C", class_a="Named Class A")
     def provide_named_class_c(self, example_class: ExampleClass, class_a: ExampleClassA,
                               class_b: ExampleClassB) -> InjectableClass[ExampleClassC]:
         assert isinstance(example_class, ExampleClass)
         assert isinstance(class_a, ExampleClassA)
+        assert hasattr(class_a, "is_the_named_one")
         assert isinstance(class_b, ExampleClassB)
-        return ExampleClassC
+        class SubclassOfExampleClassC(ExampleClassC):
+            pass
+        SubclassOfExampleClassC.is_the_named_one = True
+        return SubclassOfExampleClassC
+
+
+###################################################################################################
+# Actually the unit tests
+###################################################################################################
 
 
 class TestInvalidProviders(unittest.TestCase):
@@ -165,6 +186,64 @@ class TestInjectionWithDefaultProvider(unittest.TestCase):
         self.assertIsInstance(class_c.class_b.class_a, ExampleClassA)
         # Ensure that the "singleton provider" promise is met
         self.assertIs(class_c.class_a, class_c.class_b.class_a)
+
+
+class TestInjectionWithProviders(unittest.TestCase):
+    def test_providing_subclass(self):
+        for m in [ExampleModuleWithInstanceProviders, ExampleModuleWithClassProviders]:
+            with self.subTest(module=m):
+                injector = Injector(m())
+
+                example_class = injector.get_instance(ExampleClass)
+                self.assertIsInstance(example_class, ExampleSubclass)
+
+                example_class_again = injector.get_instance(ExampleClass)
+                self.assertIs(example_class_again, example_class)
+
+    def test_providing_named_dependency(self):
+        for m in [ExampleModuleWithInstanceProviders, ExampleModuleWithClassProviders]:
+            with self.subTest(module=m):
+                injector = Injector(m())
+
+                named_class_a = injector.get_instance(ExampleClassA, "Named Class A")
+                self.assertIsInstance(named_class_a, ExampleClassA)
+                self.assertTrue(hasattr(named_class_a, "is_the_named_one"))
+
+                named_class_a_again = injector.get_instance(ExampleClassA, "Named Class A")
+                self.assertIs(named_class_a_again, named_class_a)
+
+    def test_providing_named_dependency_with_dependencies_from_instance_provider(self):
+        injector = Injector(ExampleModuleWithInstanceProviders())
+
+        named_class_c: ExampleClassC = injector.get_instance(ExampleClassC, "Named Class C")
+        self.assertIsInstance(named_class_c, ExampleClassC)
+        self.assertTrue(hasattr(named_class_c, "is_the_named_one"))
+
+        self.assertIsInstance(named_class_c.class_a, ExampleClassA)
+        self.assertIsInstance(named_class_c.class_b, ExampleClassB)
+        self.assertIsInstance(named_class_c.class_b.class_a, ExampleClassA)
+
+        # ExampleClassC's class_a should be the named version;
+        # ExampleClassB's class_a should not
+        self.assertTrue(hasattr(named_class_c.class_a, "is_the_named_one"))
+        self.assertFalse(hasattr(named_class_c.class_b.class_a, "is_the_named_one"))
+        self.assertIsNot(named_class_c.class_a, named_class_c.class_b.class_a)
+
+    def test_providing_named_dependencies_with_dependencies_from_class_provider(self):
+        injector = Injector(ExampleModuleWithClassProviders())
+
+        named_class_c: ExampleClassC = injector.get_instance(ExampleClassC, "Named Class C")
+        self.assertIsInstance(named_class_c, ExampleClassC)
+        # Make sure it's the named subclass, not the class itself
+        self.assertTrue(type(named_class_c) is not ExampleClassC)
+        self.assertTrue(hasattr(named_class_c, "is_the_named_one"))
+
+        self.assertIsInstance(named_class_c.class_a, ExampleClassA)
+        self.assertIsInstance(named_class_c.class_b, ExampleClassB)
+        self.assertIsInstance(named_class_c.class_b.class_a, ExampleClassA)
+
+        # The class_a attribute of ExampleClassC and ExampleClassB should be the same
+        self.assertIs(named_class_c.class_a, named_class_c.class_b.class_a)
 
 
 if __name__ == "__main__":
