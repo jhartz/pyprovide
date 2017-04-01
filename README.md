@@ -210,11 +210,13 @@ instance providers and class providers). The mapping can contain 2 kinds of entr
 
 As specified a few times above, in PyProvide, **all providers are singleton providers**. The value
 returned from any provider (including instance providers, class providers, and the default
-provider) is cached and reused for any future dependencies on that class.
+provider) is cached and reused for any future dependencies on that class. This is part of the goal
+of PyProvide; it organizes your dependencies, but it isn't meant to be an implementation of a
+factory.
 
 If you need each class to have a *different instance* of a certain dependency, you can either
 inject a factory instead of the class itself, or use a different framework that is more suited to
-your needs.
+your needs. (Have you looked at [alecthomas/injector](https://github.com/alecthomas/injector)?)
 
 ## License
 
