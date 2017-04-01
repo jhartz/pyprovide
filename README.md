@@ -215,3 +215,8 @@ provider) is cached and reused for any future dependencies on that class.
 If you need each class to have a *different instance* of a certain dependency, you can either
 inject a factory instead of the class itself, or use a different framework that is more suited to
 your needs.
+
+## License
+
+    Copyright (c) 2017 Jake Hartz
+    Licensed under the MIT License. For details, see the LICENSE file.

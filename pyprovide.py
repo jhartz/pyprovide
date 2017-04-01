@@ -1,11 +1,9 @@
 """
 PyProvide - Barebones dependency injection framework for Python, based on type hints.
-
 For usage, see README.md.
 
+Copyright (c) 2017 Jake Hartz <jake@hartz.io>.
 Licensed under the MIT License. For details, see the LICENSE file.
-
-Author: Jake Hartz <jake@hartz.io>
 """
 
 import inspect
