@@ -154,11 +154,13 @@ instance providers and class providers)
     Class providers return class objects themselves, rather than instances of classes.
 
     ```python
-    from pyprovide import Injectable, Module, class_provider
+    # NOTE: "InjectableClassType" isn't actually used, but it needs to be imported if you want
+    # your program to type-check properly.
+    from pyprovide import InjectableClass, InjectableClassType, Module, class_provider
 
     class MyModule(Module):
         @class_provider()
-        def provide_class_a(self) -> Injectable[ClassA]:
+        def provide_class_a(self) -> InjectableClass[ClassA]:
             return SubclassOfClassA
 
         # The provider above is equivalent to:
