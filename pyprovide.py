@@ -7,6 +7,7 @@ Licensed under the MIT License. For details, see the LICENSE file.
 """
 
 import inspect
+import threading
 from typing import \
     Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Set, Tuple, TypeVar, Union, \
     cast, get_type_hints
@@ -56,7 +57,7 @@ class DependencyError(Exception):
         err = self.reason
         if self.name is not None:
             err += " (\"%s\")" % self.name
-        err += ": " + ", required by".join(str(d) for d in self.dependency_chain)
+        err += ":\n    Class: " + "\n    Required by: ".join(str(d) for d in self.dependency_chain)
         return err
 
 
@@ -177,6 +178,11 @@ def _get_param_names_and_hints(func: Callable[..., Any], skip_params: int = 0) -
 
 
 class Module:
+    """
+    A module defines a specific configuration of dependencies by having provider methods that
+    define how to provide dependencies for certain classes. See the README for usage examples.
+    """
+
     def __init__(self) -> None:
         self._providers: Dict[_ProviderKey, _ProviderMethod] = {}
         self._sub_modules: List[Module] = []
@@ -212,7 +218,16 @@ class Module:
 
 
 class Injector:
+    """
+    An injector holds a registry of providers and manages creating instances of dependencies.
+    After an instance of this class is created, its get_instance method can be safely called from
+    multiple threads concurrently.
+    """
+
+    _creating_instance_sentinel = object()
+
     def __init__(self, *modules: Module) -> None:
+        self._lock = threading.RLock()
         self._provider_registry: Dict[_ProviderKey, _ProviderMethod] = {}
         self._instance_registry: Dict[_ProviderKey, Any] = {}
         self._added_modules: Set[Module] = set()
@@ -225,6 +240,8 @@ class Injector:
     def _add_modules(self, modules: Iterable["Module"]) -> List[Tuple[_ProviderKey, _ProviderKey]]:
         """
         Add modules, returning a list containing any duplicate providers found while adding them.
+
+        This method is NOT thread-safe.
         """
         duplicate_pairs: List[Tuple[_ProviderKey, _ProviderKey]] = []
         for m in modules:
@@ -242,7 +259,7 @@ class Injector:
 
     def get_instance(self, dependency: type, dependency_name: Optional[str] = None) -> Any:
         """
-        Get an instance of an injectable class.
+        Get an instance of an injectable class. This method is thread-safe.
 
         :param dependency: The class that we will return an instance of.
         :param dependency_name: The name of the dependency, if we want a named dependency.
@@ -253,7 +270,7 @@ class Injector:
                  dependency_chain: Optional[List[type]] = None) -> Any:
         """
         Find or create a provider for a dependency, and call it to get an instance of the
-        dependency, returning the result.
+        dependency, returning the result. This method is thread-safe.
         """
         if not dependency_chain:
             dependency_chain = []
@@ -264,29 +281,46 @@ class Injector:
         provider_key = _ProviderKey(dependency, dependency_name)
         # See if we have a cached instance of this dependency
         if provider_key in self._instance_registry:
-            return self._instance_registry[provider_key]
+            # Make sure it's an actually completely created instance
+            if self._instance_registry[provider_key] is not self._creating_instance_sentinel:
+                return self._instance_registry[provider_key]
 
-        # Try to find a provider for the dependency
-        provider_method: Optional[_ProviderMethod] = self._provider_registry.get(provider_key)
+        with self._lock:
+            # Double-checked locking (https://en.wikipedia.org/wiki/Double-checked_locking)
+            # This pattern has lots of naysayers, but should work fine in Python due to the GIL.
+            if provider_key in self._instance_registry:
+                # Check if it's actually created.
+                # If it's not, only one thread can be resolving and creating instances at a time,
+                # so it must be a dependency cycle.
+                if self._instance_registry[provider_key] is self._creating_instance_sentinel:
+                    raise DependencyError("Detected dependency cycle",
+                                          dependency_chain, dependency_name)
+                # Nope, it's an actual real instance of the dependency we're looking for
+                return self._instance_registry[provider_key]
 
-        method_or_class: Union[_ProviderMethod, type, None] = None
-        if provider_method is not None:
-            method_or_class = provider_method
-        else:
-            # We don't have a provider; but if the class is a decorated class, we can pass in the
-            # class itself (unless they want a named dependency).
-            # This is, essentially, the concept of the "default provider"
-            if not dependency_name and _is_decorated_class(dependency):
-                method_or_class = dependency
+            # Try to find a provider for the dependency
+            method_or_class: Union[_ProviderMethod, type, None] = None
+            if provider_key in self._provider_registry:
+                method_or_class = self._provider_registry[provider_key]
+            else:
+                # We don't have a provider; but if the class is a decorated class, we can pass in
+                # the class itself (unless they want a named dependency).
+                # This is, essentially, the concept of the "default provider" (spoiler: it's not
+                # actually a provider method; that terminology just makes it easier to understand).
+                if not dependency_name and _is_decorated_class(dependency):
+                    method_or_class = dependency
 
-        if not method_or_class:
-            raise DependencyError("Could not find or create provider for dependency",
-                                  dependency_chain, dependency_name)
+            if not method_or_class:
+                raise DependencyError("Could not find or create provider for dependency",
+                                      dependency_chain, dependency_name)
 
-        instance: Any = self._call_with_dependencies(method_or_class, dependency_chain)
-        # Cache this instance for the future
-        self._instance_registry[provider_key] = instance
-        return instance
+            # Indicate that we're in the process of creating this instance (for cycle detection)
+            self._instance_registry[provider_key] = self._creating_instance_sentinel
+            # Create the instance
+            instance: Any = self._call_with_dependencies(method_or_class, dependency_chain)
+            # Cache this instance for the future
+            self._instance_registry[provider_key] = instance
+            return instance
 
     def _call_with_dependencies(self, method_or_class: Union[_ProviderMethod, type],
                                 dependency_chain: List[type]) -> Any:

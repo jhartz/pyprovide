@@ -115,6 +115,26 @@ class TestInvalidProviders(unittest.TestCase):
                     pass
 
 
+class TestDependencyCycle(unittest.TestCase):
+    def test_dependency_cycle(self):
+        class Example1: pass
+        class Example2:
+            @inject()
+            def __init__(self, example1: Example1): pass
+        class Example3:
+            @inject()
+            def __init__(self, example2: Example2): pass
+        class ExampleModule(Module):
+            @provider()
+            def provide_example_1(self, example3: Example3) -> Example1:
+                return Example1()
+
+        injector = Injector(ExampleModule())
+        with self.assertRaises(DependencyError) as assertion:
+            injector.get_instance(Example1)
+        self.assertEqual(assertion.exception.reason, "Detected dependency cycle")
+
+
 class TestInjectionWithDefaultProvider(unittest.TestCase):
     def test_with_class_with_no_dependences(self):
         injector = Injector()
