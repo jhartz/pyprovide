@@ -14,22 +14,22 @@ how it is implemented in PyProvide.
 
 ### Key Terms
 
-**Dependency:** A class that is needed by another class or multiple other classes
-  - Usually, dependencies are specified as abstract classes that have several possible
-    implementations (but this does not have to be the case).
+**Dependency:** A class that is needed by another class or multiple other classes. Usually,
+dependencies are specified as abstract classes that have several possible implementations (but this
+does not have to be the case).
 
 **Named Dependency:** A dependency that is identified by both a name and a type (as opposed to just
-a type)
+a type).
 
-**Decorated class:** A class whose constructor (`__init__` method) is decorated with `@inject`
+**Decorated class:** A class whose constructor (`__init__` method) is decorated with `@inject`.
   - The parameters in the constructor of a decorated class represent its dependencies, and
     instances of these dependencies are passed to the constructor by the injector.
   - Decorated classes do not need providers in order to be injected as dependencies.
 
-**Injectable class:** A class that either has a *provider* or is a *decorated class*
-  - Injectable classes can be injected as dependencies to other classes.
+**Injectable class:** A class that either has a *provider* or is a *decorated class*. Injectable
+classes can be injected as dependencies to other classes.
 
-**Injector:** A shared object that manages acquiring instances of dependencies
+**Injector:** A shared object that manages acquiring instances of dependencies.
   - To get an instance of a dependency, the injector first looks for a *provider* specified by one
     of the injector's modules; if it cannot find one, but the dependency is a *decorated class*,
     then it uses the *default provider* to get an instance.
@@ -47,7 +47,6 @@ a type)
   - There are 3 types of providers:
 
     **Instance Provider**: Returns an instance of the class that it provides
-      - This is the default type of provider.
       - Instance providers use the `@provider()` decorator.
 
     **Class Provider**: Rather than returning an instance, returns the class itself
@@ -58,17 +57,13 @@ a type)
       - Class providers use the `@class_provider()` decorator.
 
     **Default Provider**: The provider that is used for all *decorated classes* that do not have
-    any other provider
-      - This saves you from having to write a provider for simple classes.
+    any other provider. This saves you from having to write a provider for simple classes.
 
 **Provider Registry:** A mapping inside the injector of types (i.e. classes) to providers (both
-instance providers and class providers)
-  - The mapping can contain 2 kinds of entries:
+instance providers and class providers). The mapping can contain 2 kinds of entries:
 
-    |                                   |                                 |
-    | --------------------------------- | ------------------------------- |
-    | **1.** Type --> Provider          | (to handle normal dependencies) |
-    | **2.** Name and Type --> Provider | (to handle named dependencies)  |
+  1. **Type --> Provider**          (to handle normal dependencies)
+  2. **Name and Type --> Provider** (to handle named dependencies)
 
   - For any given type:
     - Only ONE of the first kind of entry can exist in the registry.
