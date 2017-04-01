@@ -134,6 +134,7 @@ class TestInjectionWithDefaultProvider(unittest.TestCase):
         self.assertIsInstance(class_c.class_a, ExampleClassA)
         self.assertIsInstance(class_c.class_b, ExampleClassB)
         self.assertIsInstance(class_c.class_b.class_a, ExampleClassA)
+        # Ensure that the "singleton provider" promise is met
         self.assertIs(class_c.class_a, class_c.class_b.class_a)
 
 
