@@ -2,6 +2,8 @@
 
 Barebones dependency injection framework for Python, based on type hints
 
+Requires **Python 3.6**
+
 ## Introduction
 
 This documentation assumes that you already know what the dependency injection pattern is. If not,
