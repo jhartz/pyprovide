@@ -29,9 +29,15 @@ _PYPROVIDE_PROPERTIES_ATTR = "_pyprovide_properties"
 ###################################################################################################
 
 
+class BadConstructorError(Exception):
+    """
+    Raised when an invalid __init__ method is decorated with "@inject()".
+    """
+
+
 class BadProviderError(Exception):
     """
-    Raised when an invalid provider function is decorated with "@provider()" or "@class_provider()"
+    Raised when an invalid provider method is decorated with "@provider()" or "@class_provider()"
     in a module.
     """
 
@@ -57,7 +63,8 @@ class DependencyError(Exception):
         err = self.reason
         if self.name is not None:
             err += " (\"%s\")" % self.name
-        err += ":\n    Class: " + "\n    Required by: ".join(str(d) for d in self.dependency_chain)
+        err += ":\n    Dependency: "
+        err += "\n    Required by: ".join(str(d) for d in self.dependency_chain)
         return err
 
 
@@ -190,8 +197,8 @@ class Module:
         # Register all the providers in this class
         # (requires iterating over all of this class's members, and letting "_register" filter out
         # any that don't have one of our decorators)
-        for name, func in inspect.getmembers(self):
-            self._register(func, name)
+        for name, method in inspect.getmembers(self):
+            self._register(method, name)
 
     def _register(self, provider_method: _ProviderMethod, provider_method_name: str) -> None:
         if not hasattr(provider_method, _PYPROVIDE_PROPERTIES_ATTR):
@@ -377,6 +384,23 @@ class Injector:
 ###################################################################################################
 
 
+def _check_named_dependencies(method: Union[_InitMethod, _ProviderMethod],
+                              named_dependencies: Dict[str, str]) -> None:
+    """
+    Check that all named dependencies have a corresponding parameter that they're attached to.
+    If not, raise a BadConstructorError or a BadProviderError.
+    """
+    param_names = {name for name, hint in _get_param_names_and_hints(method, skip_params=1)}
+    unknown_params = set(named_dependencies.keys()) - param_names
+    if len(unknown_params) > 0:
+        msg = "Found named dependencies that don't correspond to a parameter (in %s): %s" % \
+              (method, unknown_params)
+        if method.__name__ == "__init__":
+            raise BadConstructorError(msg)
+        else:
+            raise BadProviderError(msg)
+
+
 def inject(**named_dependencies: str) -> Callable[[_InitMethod], _InitMethod]:
     """
     Decorator for a class's __init__ method that uses the method's parameters to inject the class's
@@ -394,13 +418,19 @@ def inject(**named_dependencies: str) -> Callable[[_InitMethod], _InitMethod]:
     Note that you must call this decorator like a function (i.e. like "@inject()" or
     "@inject( ... )", NOT just "@inject").
     """
-    def handle(func: _InitMethod) -> _InitMethod:
-        setattr(func, _PYPROVIDE_PROPERTIES_ATTR, _InjectDecoratorProperties(named_dependencies))
-        return func
+    def handle(init_method: _InitMethod) -> _InitMethod:
+        _check_named_dependencies(init_method, named_dependencies)
+        setattr(init_method, _PYPROVIDE_PROPERTIES_ATTR,
+                _InjectDecoratorProperties(named_dependencies))
+        return init_method
     return handle
 
 
-def _get_provider_return_type(provider_method: _ProviderMethod, provider_type: str) -> type:
+def _check_provider_method(provider_method: _ProviderMethod, provider_type: str) -> type:
+    """
+    Validate that a provider method is valid. If it is, then return the provider method's return
+    type annotation. If not, raise a BadProviderError.
+    """
     signature = inspect.signature(provider_method)
 
     # Validate the return type annotation
@@ -439,7 +469,8 @@ def provider(provided_dependency_name: Optional[str] = None, **named_dependencie
     "@provider( ... )", NOT just "@provider").
     """
     def handle(provider_method: _ProviderMethod) -> _ProviderMethod:
-        provided_dependency_type = _get_provider_return_type(provider_method, "Provider")
+        _check_named_dependencies(provider_method, named_dependencies)
+        provided_dependency_type = _check_provider_method(provider_method, "Provider")
         setattr(provider_method, _PYPROVIDE_PROPERTIES_ATTR,
                 _ProviderDecoratorProperties(named_dependencies,
                                              provided_dependency_type,
@@ -464,10 +495,11 @@ def class_provider(provided_dependency_name: Optional[str] = None, **named_depen
     "@class_provider( ... )", NOT just "@class_provider").
     """
     def handle(provider_method: _ProviderMethod) -> _ProviderMethod:
-        return_type: Any = _get_provider_return_type(provider_method, "Class provider")
+        _check_named_dependencies(provider_method, named_dependencies)
+        return_type: Any = _check_provider_method(provider_method, "Class provider")
         if not hasattr(return_type, "__origin__") or return_type.__origin__ is not InjectableClass:
             raise BadProviderError("Class provider \"%s\"'s return type annotation \"%s\" is not "
-                                   "of the form InjectableClass(...)" %
+                                   "of the form InjectableClass[...]" %
                                    (provider_method.__name__, return_type))
 
         setattr(provider_method, _PYPROVIDE_PROPERTIES_ATTR,
