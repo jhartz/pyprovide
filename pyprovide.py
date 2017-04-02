@@ -396,19 +396,22 @@ def _check_dependencies(method: Union[_InitMethod, _ProviderMethod],
 
     # Check that all the arguments have type hints
     naked_params = [name for name, hint in params if not hint]
-    if naked_params:
+    if len(naked_params) > 0:
         return "missing type hint annotation for parameters: %s" % naked_params
 
     # Check that all the type hints are valid
     invalid_params = [name for name, hint in params if not isinstance(hint, type)]
-    if invalid_params:
+    if len(invalid_params) > 0:
         return "has parameters whose annotations are not types: %s" % invalid_params
 
     # Check named dependencies
     param_names = {name for name, hint in params}
     unknown_params = [name for name in named_dependencies.keys() if name not in param_names]
-    if unknown_params:
+    if len(unknown_params) > 0:
         return "has named dependencies that don't correspond to a parameter: %s" % unknown_params
+
+    # All good!
+    return None
 
 
 def inject(**named_dependencies: str) -> Callable[[_InitMethod], _InitMethod]:
@@ -430,7 +433,7 @@ def inject(**named_dependencies: str) -> Callable[[_InitMethod], _InitMethod]:
     """
     def handle(init_method: _InitMethod) -> _InitMethod:
         err = _check_dependencies(init_method, named_dependencies)
-        if err:
+        if err is not None:
             raise BadConstructorError("Constructor \"%s\" %s" % (init_method, err))
 
         setattr(init_method, _PYPROVIDE_PROPERTIES_ATTR,
@@ -474,7 +477,7 @@ def provider(provided_dependency_name: Optional[str] = None, **named_dependencie
     """
     def handle(provider_method: _ProviderMethod) -> _ProviderMethod:
         err = _check_dependencies(provider_method, named_dependencies)
-        if err:
+        if err is not None:
             raise BadProviderError("Provider \"%s\" %s" % (provider_method.__name__, err))
 
         provided_dependency_type = _get_provider_return_type(provider_method, "Provider")
@@ -503,7 +506,7 @@ def class_provider(provided_dependency_name: Optional[str] = None, **named_depen
     """
     def handle(provider_method: _ProviderMethod) -> _ProviderMethod:
         err = _check_dependencies(provider_method, named_dependencies)
-        if err:
+        if err is not None:
             raise BadProviderError("Class provider \"%s\" %s" % (provider_method.__name__, err))
 
         return_type: Any = _get_provider_return_type(provider_method, "Class provider")
