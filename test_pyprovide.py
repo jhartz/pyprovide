@@ -8,7 +8,7 @@ Licensed under the MIT License. For details, see the LICENSE file.
 
 import unittest
 from pyprovide import \
-    BadModuleError, BadProviderError, DependencyError, \
+    BadConstructorError, BadModuleError, BadProviderError, DependencyError, \
     InjectableClass, InjectableClassType, \
     Injector, Module, \
     class_provider, inject, provider
@@ -120,7 +120,39 @@ class ExampleModuleWithClassProviders(Module):
 ###################################################################################################
 
 
-class TestInvalidProviders(unittest.TestCase):
+class TestConstructorErrors(unittest.TestCase):
+    def test_constructor_without_param_types(self):
+        with self.assertRaises(BadConstructorError) as assertion:
+            class Test:
+                @inject()
+                def __init__(self, what, am, i):
+                    pass
+
+        self.assertIn("missing type hint annotation for parameters: ['what', 'am', 'i']",
+                      str(assertion.exception))
+
+    def test_constructor_with_invalid_param_type(self):
+        with self.assertRaises(BadConstructorError) as assertion:
+            class Test:
+                @inject()
+                def __init__(self, dep: 42):
+                    pass
+
+        self.assertIn("has parameters whose annotations are not types: ['dep']",
+                      str(assertion.exception))
+
+    def test_constructor_with_invalid_named_dependencies(self):
+        with self.assertRaises(BadConstructorError) as assertion:
+            class Test:
+                @inject(class_a="This one's a parameter", class_b="Not actually a parameter")
+                def __init__(self, class_a: ExampleClassA):
+                    pass
+
+        self.assertIn("has named dependencies that don't correspond to a parameter: ['class_b']",
+                      str(assertion.exception))
+
+
+class TestProviderErrors(unittest.TestCase):
     def test_instance_provider_without_return_type(self):
         with self.assertRaises(BadProviderError) as assertion:
             class TestModule(Module):
@@ -174,34 +206,40 @@ class TestInvalidProviders(unittest.TestCase):
                 def provider_without_param_types(self, what, am, i) -> ExampleClass:
                     pass
 
-        self.assertIn("missing type hint annotation for parameter", str(assertion.exception))
+        self.assertIn("missing type hint annotation for parameters: ['what', 'am', 'i']",
+                      str(assertion.exception))
 
     def test_class_provider_without_param_types(self):
         with self.assertRaises(BadProviderError) as assertion:
             class TestModule(Module):
                 @class_provider()
-                def provider_without_param_types(self, the, who) -> InjectableClass[ExampleClass]:
+                def provider_without_param_types(self, what, am, i) -> \
+                        InjectableClass[ExampleClass]:
                     pass
 
-        self.assertIn("missing type hint annotation for parameter", str(assertion.exception))
+        self.assertIn("missing type hint annotation for parameters: ['what', 'am', 'i']",
+                      str(assertion.exception))
 
     def test_instance_provider_with_invalid_param_type(self):
         with self.assertRaises(BadProviderError) as assertion:
             class TestModule(Module):
                 @provider()
-                def provider_with_invalid_param_type(self, d: 42) -> ExampleClass:
+                def provider_with_invalid_param_type(self, dep: 42) -> ExampleClass:
                     pass
 
-        self.assertIn("annotation for parameter \"d\" is not a type", str(assertion.exception))
+        self.assertIn("has parameters whose annotations are not types: ['dep']",
+                      str(assertion.exception))
 
     def test_class_provider_with_invalid_param_type(self):
         with self.assertRaises(BadProviderError) as assertion:
             class TestModule(Module):
                 @class_provider()
-                def provider_with_invalid_param_type(self, d: 42) -> InjectableClass[ExampleClass]:
+                def provider_with_invalid_param_type(self, dep: 42) -> \
+                        InjectableClass[ExampleClass]:
                     pass
 
-        self.assertIn("annotation for parameter \"d\" is not a type", str(assertion.exception))
+        self.assertIn("has parameters whose annotations are not types: ['dep']",
+                      str(assertion.exception))
 
     def test_instance_provider_with_invalid_named_dependencies(self):
         with self.assertRaises(BadProviderError) as assertion:
@@ -210,9 +248,8 @@ class TestInvalidProviders(unittest.TestCase):
                 def provider_with_invalid_named_deps(self, class_a: ExampleClassA) -> ExampleClass:
                     pass
 
-        self.assertRegex(str(assertion.exception),
-                         r"^Found named dependencies that don't correspond to a parameter "
-                         r"\(in .*\): {'class_b'}")
+        self.assertIn("has named dependencies that don't correspond to a parameter: ['class_b']",
+                      str(assertion.exception))
 
     def test_class_provider_with_invalid_named_dependencies(self):
         with self.assertRaises(BadProviderError) as assertion:
@@ -222,9 +259,8 @@ class TestInvalidProviders(unittest.TestCase):
                         InjectableClass[ExampleClass]:
                     pass
 
-        self.assertRegex(str(assertion.exception),
-                         r"^Found named dependencies that don't correspond to a parameter "
-                         r"\(in .*\): {'class_b'}")
+        self.assertIn("has named dependencies that don't correspond to a parameter: ['class_b']",
+                      str(assertion.exception))
 
     def test_inject_decorated_method_in_module(self):
         class TestModule(Module):
@@ -239,17 +275,6 @@ class TestInvalidProviders(unittest.TestCase):
 
 
 class TestDependencyErrors(unittest.TestCase):
-    def test_dependency_not_a_type(self):
-        class Example:
-            @inject()
-            def __init__(self, dep: 69):
-                self.dep = dep
-
-        injector = Injector()
-        with self.assertRaises(DependencyError) as assertion:
-            injector.get_instance(Example)
-        self.assertEqual(assertion.exception.reason, "Dependency is not a type")
-
     def test_dependency_cycle(self):
         class Example1:
             pass
@@ -314,18 +339,6 @@ class TestDependencyErrors(unittest.TestCase):
             injector.get_instance(ExampleClass)
         self.assertRegex(assertion.exception.reason,
                          r'^Class provider ".*" returned a non-decorated class$')
-
-    def test_decorated_class_missing_type_hint(self):
-        class ExampleClass:
-            @inject()
-            def __init__(self, what_do_you_want):
-                pass
-
-        injector = Injector()
-        with self.assertRaises(DependencyError) as assertion:
-            injector.get_instance(ExampleClass)
-        self.assertRegex(assertion.exception.reason,
-                         r'^Dependency parameter "what_do_you_want" in ".*" missing type hint$')
 
 
 class TestInjectionWithDefaultProvider(unittest.TestCase):
