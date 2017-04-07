@@ -20,6 +20,9 @@ InjectableClass = Callable[..., InjectableClassType]
 # Represents an __init__ method of a class
 _InitMethod = Callable[..., None]
 
+# Represents the name of a named dependency
+_Name = object
+
 # The name of an attribute that is set on methods decorated with one of our decorator functions
 _PYPROVIDE_PROPERTIES_ATTR = "_pyprovide_properties"
 
@@ -53,8 +56,8 @@ class DependencyError(Exception):
     """
     Raised when the injector has an issue providing a dependency.
     """
-    def __init__(self, reason: str, dependency_chain: List[type], name: Optional[str] = None) -> \
-            None:
+    def __init__(self, reason: str, dependency_chain: List[type],
+                 name: Optional[_Name] = None) -> None:
         self.reason = reason
         self.dependency_chain = dependency_chain
         self.name = name
@@ -75,14 +78,14 @@ class DependencyError(Exception):
 
 class _InjectDecoratorProperties(NamedTuple):
     # Properties attached to a method decorated with "@inject(...)"
-    named_dependencies: Dict[str, str]
+    named_dependencies: Dict[str, _Name]
 
 
 class _ProviderDecoratorProperties(NamedTuple):
     # Properties attached to a method decorated with "@provider(...)" or "@class_provider(...)"
-    named_dependencies: Dict[str, str]
+    named_dependencies: Dict[str, _Name]
     provided_dependency_type: type
-    provided_dependency_name: Optional[str]
+    provided_dependency_name: Optional[_Name]
     is_class_provider: bool
 
 
@@ -97,7 +100,7 @@ class _ProviderKey:
     named dependency). This is used to ensure uniqueness of providers in a module or injector's
     registry.
     """
-    def __init__(self, provided_dependency_type: type, provided_dependency_name: Optional[str],
+    def __init__(self, provided_dependency_type: type, provided_dependency_name: Optional[_Name],
                  provider_method_name: Optional[str] = None,
                  containing_module: Optional["Module"] = None) -> None:
         self.provided_dependency_type = provided_dependency_type
@@ -231,12 +234,16 @@ class Injector:
     multiple threads concurrently.
     """
 
+    CURRENT_INJECTOR = object()
+
     _creating_instance_sentinel = object()
 
     def __init__(self, *modules: Module) -> None:
         self._lock = threading.RLock()
         self._provider_registry: Dict[_ProviderKey, _ProviderMethod] = {}
-        self._instance_registry: Dict[_ProviderKey, Any] = {}
+        self._instance_registry: Dict[_ProviderKey, Any] = {
+            _ProviderKey(Injector, Injector.CURRENT_INJECTOR): self
+        }
         self._added_modules: Set[Module] = set()
 
         duplicate_pairs = self._add_modules(modules)
@@ -264,7 +271,7 @@ class Injector:
             duplicate_pairs += self._add_modules(m._sub_modules)
         return duplicate_pairs
 
-    def get_instance(self, dependency: type, dependency_name: Optional[str] = None) -> Any:
+    def get_instance(self, dependency: type, dependency_name: Optional[_Name] = None) -> Any:
         """
         Get an instance of an injectable class. This method is thread-safe.
 
@@ -273,7 +280,7 @@ class Injector:
         """
         return self._resolve(dependency, dependency_name)
 
-    def _resolve(self, dependency: type, dependency_name: Optional[str] = None,
+    def _resolve(self, dependency: type, dependency_name: Optional[_Name] = None,
                  dependency_chain: Optional[List[type]] = None) -> Any:
         """
         Find or create a provider for a dependency, and call it to get an instance of the
@@ -385,7 +392,7 @@ class Injector:
 
 
 def _check_dependencies(method: Union[_InitMethod, _ProviderMethod],
-                        named_dependencies: Dict[str, str]) -> Optional[str]:
+                        named_dependencies: Dict[str, _Name]) -> Optional[str]:
     """
     Check that all parameters (i.e. dependencies) have a correct type hint, and check that all
     named dependencies have a corresponding parameter that they're attached to.
@@ -414,7 +421,7 @@ def _check_dependencies(method: Union[_InitMethod, _ProviderMethod],
     return None
 
 
-def inject(**named_dependencies: str) -> Callable[[_InitMethod], _InitMethod]:
+def inject(**named_dependencies: _Name) -> Callable[[_InitMethod], _InitMethod]:
     """
     Decorator for a class's __init__ method that uses the method's parameters to inject the class's
     dependencies. The type of each parameter is determined by the parameter's type hint annotation.
@@ -461,8 +468,8 @@ def _get_provider_return_type(provider_method: _ProviderMethod, provider_type: s
     return return_type
 
 
-def provider(provided_dependency_name: Optional[str] = None, **named_dependencies: str) -> \
-        Callable[[_ProviderMethod], _ProviderMethod]:
+def provider(provided_dependency_name: Optional[_Name] = None,
+             **named_dependencies: _Name) -> Callable[[_ProviderMethod], _ProviderMethod]:
     """
     Method decorator for instance provider methods in a module class. The provider method can take
     parameters representing dependencies, just like the "@inject()" decorator, and named
@@ -490,8 +497,8 @@ def provider(provided_dependency_name: Optional[str] = None, **named_dependencie
     return handle
 
 
-def class_provider(provided_dependency_name: Optional[str] = None, **named_dependencies: str) -> \
-        Callable[[_ProviderMethod], _ProviderMethod]:
+def class_provider(provided_dependency_name: Optional[_Name] = None,
+                   **named_dependencies: _Name) -> Callable[[_ProviderMethod], _ProviderMethod]:
     """
     Method decorator for class provider methods in a module class. The provider method can take
     parameters representing dependencies, just like the "@inject()" decorator, and named

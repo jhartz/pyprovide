@@ -363,6 +363,16 @@ class TestInjectionWithDefaultProvider(unittest.TestCase):
         # Ensure that the "singleton provider" promise is met
         self.assertIs(class_c.class_a, class_c.class_b.class_a)
 
+    def test_injecting_current_injector(self):
+        class Test:
+            @inject(injector=Injector.CURRENT_INJECTOR)
+            def __init__(self, injector: Injector):
+                self.injector = injector
+
+        injector = Injector()
+        test = injector.get_instance(Test)
+        self.assertIs(test.injector, injector)
+
 
 class TestInjectionWithProviders(unittest.TestCase):
     def test_providing_subclass(self):
