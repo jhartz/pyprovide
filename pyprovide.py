@@ -56,8 +56,7 @@ class DependencyError(Exception):
     """
     Raised when the injector has an issue providing a dependency.
     """
-    def __init__(self, reason: str, dependency_chain: List[type],
-                 name: Optional[_Name] = None) -> None:
+    def __init__(self, reason: str, dependency_chain: List[type], name: _Name = None) -> None:
         self.reason = reason
         self.dependency_chain = dependency_chain
         self.name = name
@@ -76,17 +75,19 @@ class DependencyError(Exception):
 ###################################################################################################
 
 
-class _InjectDecoratorProperties(NamedTuple):
-    # Properties attached to a method decorated with "@inject(...)"
-    named_dependencies: Dict[str, _Name]
+# Properties attached to a method decorated with "@inject(...)"
+_InjectDecoratorProperties = NamedTuple("_InjectDecoratorProperties", [
+    ("named_dependencies", Dict[str, _Name])
+])
 
 
-class _ProviderDecoratorProperties(NamedTuple):
-    # Properties attached to a method decorated with "@provider(...)" or "@class_provider(...)"
-    named_dependencies: Dict[str, _Name]
-    provided_dependency_type: type
-    provided_dependency_name: Optional[_Name]
-    is_class_provider: bool
+# Properties attached to a method decorated with "@provider(...)" or "@class_provider(...)"
+_ProviderDecoratorProperties = NamedTuple("_ProviderDecoratorProperties", [
+    ("named_dependencies", Dict[str, _Name]),
+    ("provided_dependency_type", type),
+    ("provided_dependency_name", Optional[_Name]),
+    ("is_class_provider", bool)
+])
 
 
 ###################################################################################################
@@ -101,8 +102,7 @@ class _ProviderKey:
     registry.
     """
     def __init__(self, provided_dependency_type: type, provided_dependency_name: Optional[_Name],
-                 provider_method_name: Optional[str] = None,
-                 containing_module: Optional["Module"] = None) -> None:
+                 provider_method_name: str = None, containing_module: "Module" = None) -> None:
         self.provided_dependency_type = provided_dependency_type
         self.provided_dependency_name = provided_dependency_name
 
@@ -151,7 +151,7 @@ _ProviderMethod = Callable[..., Any]
 
 def _is_decorated_class(dependency: type) -> bool:
     # To make the type checker happy (it doesn't like when we access "__init__" directly)
-    dependency_unsafe: Any = dependency
+    dependency_unsafe = dependency  # type: Any
     if not hasattr(dependency_unsafe.__init__, _PYPROVIDE_PROPERTIES_ATTR):
         return False
     properties = getattr(dependency_unsafe.__init__, _PYPROVIDE_PROPERTIES_ATTR)
@@ -175,8 +175,8 @@ def _get_matching_dict_key(d: Dict[KEY_TYPE, Any], k: KEY_TYPE) -> Tuple[KEY_TYP
     raise ValueError("%s not in %s" % (k, d))
 
 
-def _get_param_names_and_hints(func: Callable[..., Any], skip_params: int = 0) -> \
-        Iterable[Tuple[str, Any]]:
+def _get_param_names_and_hints(func: Callable[..., Any],
+                               skip_params: int = 0) -> Iterable[Tuple[str, Any]]:
     param_names = list(inspect.signature(func).parameters.keys())[skip_params:]
     type_hints = get_type_hints(func)
     return [(p, type_hints.get(p)) for p in param_names]
@@ -194,8 +194,8 @@ class Module:
     """
 
     def __init__(self) -> None:
-        self._providers: Dict[_ProviderKey, _ProviderMethod] = {}
-        self._sub_modules: List[Module] = []
+        self._providers = {}  # type: Dict[_ProviderKey, _ProviderMethod]
+        self._sub_modules = []  # type: List[Module]
 
         # Register all the providers in this class
         # (requires iterating over all of this class's members, and letting "_register" filter out
@@ -215,6 +215,7 @@ class Module:
                                    "@class_provider() to register providers in modules." %
                                    provider_method_name)
 
+        # noinspection PyUnresolvedReferences
         provider_key = _ProviderKey(properties.provided_dependency_type,
                                     properties.provided_dependency_name,
                                     provider_method_name, self)
@@ -240,11 +241,11 @@ class Injector:
 
     def __init__(self, *modules: Module) -> None:
         self._lock = threading.RLock()
-        self._provider_registry: Dict[_ProviderKey, _ProviderMethod] = {}
-        self._instance_registry: Dict[_ProviderKey, Any] = {
+        self._provider_registry = {}  # type: Dict[_ProviderKey, _ProviderMethod]
+        self._instance_registry = {
             _ProviderKey(Injector, Injector.CURRENT_INJECTOR): self
-        }
-        self._added_modules: Set[Module] = set()
+        }  # type: Dict[_ProviderKey, Any]
+        self._added_modules = set()  # type: Set[Module]
 
         duplicate_pairs = self._add_modules(modules)
         if len(duplicate_pairs) > 0:
@@ -257,7 +258,7 @@ class Injector:
 
         This method is NOT thread-safe.
         """
-        duplicate_pairs: List[Tuple[_ProviderKey, _ProviderKey]] = []
+        duplicate_pairs = []  # type: List[Tuple[_ProviderKey, _ProviderKey]]
         for m in modules:
             if m in self._added_modules:
                 continue
@@ -271,7 +272,7 @@ class Injector:
             duplicate_pairs += self._add_modules(m._sub_modules)
         return duplicate_pairs
 
-    def get_instance(self, dependency: type, dependency_name: Optional[_Name] = None) -> Any:
+    def get_instance(self, dependency: type, dependency_name: _Name = None) -> Any:
         """
         Get an instance of an injectable class. This method is thread-safe.
 
@@ -280,8 +281,8 @@ class Injector:
         """
         return self._resolve(dependency, dependency_name)
 
-    def _resolve(self, dependency: type, dependency_name: Optional[_Name] = None,
-                 dependency_chain: Optional[List[type]] = None) -> Any:
+    def _resolve(self, dependency: type, dependency_name: _Name = None,
+                 dependency_chain: List[type] = None) -> Any:
         """
         Find or create a provider for a dependency, and call it to get an instance of the
         dependency, returning the result. This method is thread-safe.
@@ -313,7 +314,7 @@ class Injector:
                 return self._instance_registry[provider_key]
 
             # Try to find a provider for the dependency
-            method_or_class: Union[_ProviderMethod, type, None] = None
+            method_or_class = None  # type: Union[_ProviderMethod, type, None]
             if provider_key in self._provider_registry:
                 method_or_class = self._provider_registry[provider_key]
             else:
@@ -331,7 +332,7 @@ class Injector:
             # Indicate that we're in the process of creating this instance (for cycle detection)
             self._instance_registry[provider_key] = self._creating_instance_sentinel
             # Create the instance
-            instance: Any = self._call_with_dependencies(method_or_class, dependency_chain)
+            instance = self._call_with_dependencies(method_or_class, dependency_chain)  # type: Any
             # Cache this instance for the future
             self._instance_registry[provider_key] = instance
             return instance
@@ -355,12 +356,12 @@ class Injector:
         if inspect.isclass(method_or_class):
             # It's a class (better be a decorated class)
             # To make the type checker happy (it doesn't like when we access "__init__" directly)
-            class_unsafe: Any = method_or_class
+            class_unsafe = method_or_class  # type: Any
             params = _get_param_names_and_hints(class_unsafe.__init__, skip_params=1)
             properties = getattr(class_unsafe.__init__, _PYPROVIDE_PROPERTIES_ATTR)
         else:
             # It's a function (better be a provider method)
-            provider_method: _ProviderMethod = cast(_ProviderMethod, method_or_class)
+            provider_method = cast(_ProviderMethod, method_or_class)  # type: _ProviderMethod
             params = _get_param_names_and_hints(provider_method)
             properties = getattr(provider_method, _PYPROVIDE_PROPERTIES_ATTR)
 
@@ -443,6 +444,7 @@ def inject(**named_dependencies: _Name) -> Callable[[_InitMethod], _InitMethod]:
         if err is not None:
             raise BadConstructorError("Constructor \"%s\" %s" % (init_method, err))
 
+        # noinspection PyCallingNonCallable
         setattr(init_method, _PYPROVIDE_PROPERTIES_ATTR,
                 _InjectDecoratorProperties(named_dependencies))
         return init_method
@@ -468,7 +470,7 @@ def _get_provider_return_type(provider_method: _ProviderMethod, provider_type: s
     return return_type
 
 
-def provider(provided_dependency_name: Optional[_Name] = None,
+def provider(provided_dependency_name: _Name = None,
              **named_dependencies: _Name) -> Callable[[_ProviderMethod], _ProviderMethod]:
     """
     Method decorator for instance provider methods in a module class. The provider method can take
@@ -488,6 +490,7 @@ def provider(provided_dependency_name: Optional[_Name] = None,
             raise BadProviderError("Provider \"%s\" %s" % (provider_method.__name__, err))
 
         provided_dependency_type = _get_provider_return_type(provider_method, "Provider")
+        # noinspection PyCallingNonCallable
         setattr(provider_method, _PYPROVIDE_PROPERTIES_ATTR,
                 _ProviderDecoratorProperties(named_dependencies,
                                              provided_dependency_type,
@@ -497,7 +500,7 @@ def provider(provided_dependency_name: Optional[_Name] = None,
     return handle
 
 
-def class_provider(provided_dependency_name: Optional[_Name] = None,
+def class_provider(provided_dependency_name: _Name = None,
                    **named_dependencies: _Name) -> Callable[[_ProviderMethod], _ProviderMethod]:
     """
     Method decorator for class provider methods in a module class. The provider method can take
@@ -516,12 +519,13 @@ def class_provider(provided_dependency_name: Optional[_Name] = None,
         if err is not None:
             raise BadProviderError("Class provider \"%s\" %s" % (provider_method.__name__, err))
 
-        return_type: Any = _get_provider_return_type(provider_method, "Class provider")
+        return_type = _get_provider_return_type(provider_method, "Class provider")  # type: Any
         if not hasattr(return_type, "__origin__") or return_type.__origin__ is not InjectableClass:
             raise BadProviderError("Class provider \"%s\"'s return type annotation \"%s\" is not "
                                    "of the form InjectableClass[...]" %
                                    (provider_method.__name__, return_type))
 
+        # noinspection PyCallingNonCallable
         setattr(provider_method, _PYPROVIDE_PROPERTIES_ATTR,
                 _ProviderDecoratorProperties(named_dependencies,
                                              return_type.__args__[0],

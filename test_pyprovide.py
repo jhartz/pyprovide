@@ -70,12 +70,11 @@ class ExampleClassD:
 class ExampleModuleWithInstanceProviders(Module):
     @provider()
     def provide_example_class(self) -> ExampleClass:
-        example_class: ExampleClass = ExampleSubclass()
-        return example_class
+        return ExampleSubclass()
 
     @provider("Named Class A")
     def provide_named_class_a(self) -> ExampleClassA:
-        class_a: ExampleClassA = ExampleClassA()
+        class_a = ExampleClassA()
         class_a.is_the_named_one = True
         return class_a
 
@@ -85,7 +84,7 @@ class ExampleModuleWithInstanceProviders(Module):
         assert isinstance(example_class, ExampleClass)
         assert isinstance(class_a, ExampleClassA)
         assert isinstance(class_b, ExampleClassB)
-        class_c: ExampleClassC = ExampleClassC(class_a, class_b)
+        class_c = ExampleClassC(class_a, class_b)
         class_c.is_the_named_one = True
         return class_c
 
@@ -401,7 +400,7 @@ class TestInjectionWithProviders(unittest.TestCase):
     def test_providing_named_dependency_with_dependencies_from_instance_provider(self):
         injector = Injector(ExampleModuleWithInstanceProviders())
 
-        named_class_c: ExampleClassC = injector.get_instance(ExampleClassC, "Named Class C")
+        named_class_c = injector.get_instance(ExampleClassC, "Named Class C")
         self.assertIsInstance(named_class_c, ExampleClassC)
         self.assertTrue(hasattr(named_class_c, "is_the_named_one"))
 
@@ -418,7 +417,7 @@ class TestInjectionWithProviders(unittest.TestCase):
     def test_providing_named_dependencies_with_dependencies_from_class_provider(self):
         injector = Injector(ExampleModuleWithClassProviders())
 
-        named_class_c: ExampleClassC = injector.get_instance(ExampleClassC, "Named Class C")
+        named_class_c = injector.get_instance(ExampleClassC, "Named Class C")
         self.assertIsInstance(named_class_c, ExampleClassC)
         # Make sure it's the named subclass, not the class itself
         self.assertTrue(type(named_class_c) is not ExampleClassC)
@@ -498,7 +497,7 @@ class TestInjectionWithProviders(unittest.TestCase):
         class TestModule(Module):
             @provider()
             def provide_super_class(self) -> SuperClass:
-                sub_class: SubClass = SubClass()
+                sub_class = SubClass()
                 sub_class.from_provider = True
                 return sub_class
 

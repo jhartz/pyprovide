@@ -2,7 +2,7 @@
 
 Barebones dependency injection framework for Python, based on type hints
 
-Requires **Python 3.6**
+Requires **Python 3.5**
 
 ## Introduction
 
