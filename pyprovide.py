@@ -9,7 +9,7 @@ Licensed under the MIT License. For details, see the LICENSE file.
 import inspect
 import threading
 from typing import \
-    Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Set, Tuple, TypeVar, Union, \
+    Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union, \
     cast, get_type_hints
 
 InjectableClassType = TypeVar("InjectableClassType")
@@ -25,6 +25,9 @@ _Name = object
 
 # The name of an attribute that is set on methods decorated with one of our decorator functions
 _PYPROVIDE_PROPERTIES_ATTR = "_pyprovide_properties"
+
+# Generic type variable used in various functions and methods
+T = TypeVar("T")
 
 
 ###################################################################################################
@@ -146,7 +149,7 @@ class _ProviderKey:
         else:
             return "_ProviderKey(%s)" % repr(self.provided_dependency_type)
 
-_ProviderMethod = Callable[..., Any]
+_ProviderMethod = Callable[..., object]
 
 
 def _is_decorated_class(dependency: type) -> bool:
@@ -158,10 +161,7 @@ def _is_decorated_class(dependency: type) -> bool:
     return isinstance(properties, _InjectDecoratorProperties)
 
 
-KEY_TYPE = TypeVar("KEY_TYPE")
-
-
-def _get_matching_dict_key(d: Dict[KEY_TYPE, Any], k: KEY_TYPE) -> Tuple[KEY_TYPE, KEY_TYPE]:
+def _get_matching_dict_key(d: Dict[T, Any], k: T) -> Tuple[T, T]:
     """
     Searches a dictionary for a key, and returns a tuple (key1, key2) containing both the key we
     used when searching and the key actually in the dictionary.
@@ -244,7 +244,7 @@ class Injector:
         self._provider_registry = {}  # type: Dict[_ProviderKey, _ProviderMethod]
         self._instance_registry = {
             _ProviderKey(Injector, Injector.CURRENT_INJECTOR): self
-        }  # type: Dict[_ProviderKey, Any]
+        }  # type: Dict[_ProviderKey, object]
         self._added_modules = set()  # type: Set[Module]
 
         duplicate_pairs = self._add_modules(modules)
@@ -272,7 +272,7 @@ class Injector:
             duplicate_pairs += self._add_modules(m._sub_modules)
         return duplicate_pairs
 
-    def get_instance(self, dependency: type, dependency_name: _Name = None) -> Any:
+    def get_instance(self, dependency: Type[T], dependency_name: _Name = None) -> T:
         """
         Get an instance of an injectable class. This method is thread-safe.
 
@@ -281,15 +281,15 @@ class Injector:
         """
         return self._resolve(dependency, dependency_name)
 
-    def _resolve(self, dependency: type, dependency_name: _Name = None,
-                 dependency_chain: List[type] = None) -> Any:
+    def _resolve(self, dependency: Type[T], dependency_name: _Name = None,
+                 dependency_chain: List[type] = None) -> T:
         """
         Find or create a provider for a dependency, and call it to get an instance of the
         dependency, returning the result. This method is thread-safe.
         """
         if not dependency_chain:
             dependency_chain = []
-        dependency_chain = [dependency] + dependency_chain
+        dependency_chain = [cast(type, dependency)] + dependency_chain
         if not isinstance(dependency, type):
             raise DependencyError("Dependency is not a type", dependency_chain, dependency_name)
 
@@ -298,7 +298,7 @@ class Injector:
         if provider_key in self._instance_registry:
             # Make sure it's an actually completely created instance
             if self._instance_registry[provider_key] is not self._creating_instance_sentinel:
-                return self._instance_registry[provider_key]
+                return cast(T, self._instance_registry[provider_key])
 
         with self._lock:
             # Double-checked locking (https://en.wikipedia.org/wiki/Double-checked_locking)
@@ -311,10 +311,10 @@ class Injector:
                     raise DependencyError("Detected dependency cycle",
                                           dependency_chain, dependency_name)
                 # Nope, it's an actual real instance of the dependency we're looking for
-                return self._instance_registry[provider_key]
+                return cast(T, self._instance_registry[provider_key])
 
             # Try to find a provider for the dependency
-            method_or_class = None  # type: Union[_ProviderMethod, type, None]
+            method_or_class = None  # type: Optional[Union[_ProviderMethod, type]]
             if provider_key in self._provider_registry:
                 method_or_class = self._provider_registry[provider_key]
             else:
@@ -332,13 +332,13 @@ class Injector:
             # Indicate that we're in the process of creating this instance (for cycle detection)
             self._instance_registry[provider_key] = self._creating_instance_sentinel
             # Create the instance
-            instance = self._call_with_dependencies(method_or_class, dependency_chain)  # type: Any
+            instance = cast(T, self._call_with_dependencies(method_or_class, dependency_chain))
             # Cache this instance for the future
             self._instance_registry[provider_key] = instance
             return instance
 
     def _call_with_dependencies(self, method_or_class: Union[_ProviderMethod, type],
-                                dependency_chain: List[type]) -> Any:
+                                dependency_chain: List[type]) -> object:
         """
         Get instances of a decorated class's or a provider method's dependencies, and then call the
         method or instantiate the class, returning the result.
@@ -350,7 +350,7 @@ class Injector:
         if not callable(method_or_class):
             raise ValueError("Argument is not a function or a class: %s" % method_or_class)
 
-        def result_handler(result: Any) -> Any:
+        def result_handler(result: object) -> object:
             return result
 
         if inspect.isclass(method_or_class):
@@ -367,7 +367,7 @@ class Injector:
 
             if properties.is_class_provider:
                 # Handle a class provider's return value
-                def result_handler(result: Any) -> Any:
+                def result_handler(result: object) -> object:
                     if not isinstance(result, type):
                         raise DependencyError("Class provider \"%s\" returned a non-type" %
                                               method_or_class.__name__, dependency_chain)
@@ -376,7 +376,7 @@ class Injector:
                                               "class" % method_or_class.__name__, dependency_chain)
                     return self._call_with_dependencies(result, dependency_chain)
 
-        args = []
+        args = []  # type: List[object]
         for param_name, type_hint in params:
             if not type_hint:
                 raise DependencyError("Dependency parameter \"%s\" in \"%s\" missing type hint" %
