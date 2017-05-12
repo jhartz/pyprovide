@@ -15,7 +15,7 @@ from typing import \
 InjectableClassType = TypeVar("InjectableClassType")
 
 # Used as the return type for class providers, like: .... -> InjectableClass[ReturnedClass]
-InjectableClass = Callable[..., InjectableClassType]
+InjectableClass = Type[InjectableClassType]
 
 # Represents an __init__ method of a class
 _InitMethod = Callable[..., None]
