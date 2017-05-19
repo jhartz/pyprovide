@@ -8,9 +8,8 @@ Licensed under the MIT License. For details, see the LICENSE file.
 
 import inspect
 import threading
-from typing import \
-    Any, Callable, Dict, Iterable, List, NamedTuple, Optional, Set, Tuple, Type, TypeVar, Union, \
-    cast, get_type_hints
+from typing import Any, Callable, Dict, Iterable, List, Mapping, NamedTuple, Optional, Set, \
+    Sequence, Tuple, Type, TypeVar, Union, cast, get_type_hints
 
 InjectableClassType = TypeVar("InjectableClassType")
 
@@ -59,7 +58,7 @@ class DependencyError(Exception):
     """
     Raised when the injector has an issue providing a dependency.
     """
-    def __init__(self, reason: str, dependency_chain: List[type], name: _Name = None) -> None:
+    def __init__(self, reason: str, dependency_chain: Sequence[type], name: _Name = None) -> None:
         self.reason = reason
         self.dependency_chain = dependency_chain
         self.name = name
@@ -80,13 +79,13 @@ class DependencyError(Exception):
 
 # Properties attached to a method decorated with "@inject(...)"
 _InjectDecoratorProperties = NamedTuple("_InjectDecoratorProperties", [
-    ("named_dependencies", Dict[str, _Name])
+    ("named_dependencies", Mapping[str, _Name])
 ])
 
 
 # Properties attached to a method decorated with "@provider(...)" or "@class_provider(...)"
 _ProviderDecoratorProperties = NamedTuple("_ProviderDecoratorProperties", [
-    ("named_dependencies", Dict[str, _Name]),
+    ("named_dependencies", Mapping[str, _Name]),
     ("provided_dependency_type", type),
     ("provided_dependency_name", Optional[_Name]),
     ("is_class_provider", bool)
@@ -161,12 +160,12 @@ def _is_decorated_class(dependency: type) -> bool:
     return isinstance(properties, _InjectDecoratorProperties)
 
 
-def _get_matching_dict_key(d: Dict[T, Any], k: T) -> Tuple[T, T]:
+def _get_matching_dict_key(d: Mapping[T, Any], k: T) -> Tuple[T, T]:
     """
-    Searches a dictionary for a key, and returns a tuple (key1, key2) containing both the key we
-    used when searching and the key actually in the dictionary.
+    Searches a mapping for a key, and returns a tuple (key1, key2) containing both the key we
+    used when searching and the key actually in the mapping.
 
-    To accomplish this, it iterates through all the items in the dictionary, so be sure to do a
+    To accomplish this, it iterates through all the items in the mapping, so be sure to do a
     "key in dict" check before calling this.
     """
     for key in d:
@@ -282,14 +281,14 @@ class Injector:
         return self._resolve(dependency, dependency_name)
 
     def _resolve(self, dependency: Type[T], dependency_name: _Name = None,
-                 dependency_chain: List[type] = None) -> T:
+                 dependency_chain: Sequence[type] = None) -> T:
         """
         Find or create a provider for a dependency, and call it to get an instance of the
         dependency, returning the result. This method is thread-safe.
         """
         if not dependency_chain:
             dependency_chain = []
-        dependency_chain = [cast(type, dependency)] + dependency_chain
+        dependency_chain = [cast(type, dependency)] + list(dependency_chain)
         if not isinstance(dependency, type):
             raise DependencyError("Dependency is not a type", dependency_chain, dependency_name)
 
@@ -338,7 +337,7 @@ class Injector:
             return instance
 
     def _call_with_dependencies(self, method_or_class: Union[_ProviderMethod, type],
-                                dependency_chain: List[type]) -> object:
+                                dependency_chain: Sequence[type]) -> object:
         """
         Get instances of a decorated class's or a provider method's dependencies, and then call the
         method or instantiate the class, returning the result.
@@ -393,7 +392,7 @@ class Injector:
 
 
 def _check_dependencies(method: Union[_InitMethod, _ProviderMethod],
-                        named_dependencies: Dict[str, _Name]) -> Optional[str]:
+                        named_dependencies: Mapping[str, _Name]) -> Optional[str]:
     """
     Check that all parameters (i.e. dependencies) have a correct type hint, and check that all
     named dependencies have a corresponding parameter that they're attached to.
