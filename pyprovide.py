@@ -7,14 +7,21 @@ Licensed under the MIT License. For details, see the LICENSE file.
 """
 
 import inspect
+import sys
 import threading
 from typing import Any, Callable, Dict, Iterable, List, Mapping, NamedTuple, Optional, Set, \
     Sequence, Tuple, Type, TypeVar, Union, cast, get_type_hints
 
-InjectableClassType = TypeVar("InjectableClassType")
+NEW_TYPING = sys.version_info[:3] >= (3, 7, 0)  # PEP 560
+if NEW_TYPING:
+    # TODO: This breaks type-checking with mypy (since _GenericAlias is an internal API)
+    from typing import _GenericAlias
+else:
+    _GenericAlias = None
 
-# Used as the return type for class providers, like: .... -> InjectableClass[ReturnedClass]
-InjectableClass = Type[InjectableClassType]
+# For backwards compatibility
+InjectableClassType = None
+InjectableClass = Type
 
 # Represents an __init__ method of a class
 _InitMethod = Callable[..., None]
@@ -463,8 +470,9 @@ def _get_provider_return_type(provider_method: _ProviderMethod, provider_type: s
         raise BadProviderError("%s \"%s\" missing return type annotation" %
                                (provider_type, provider_method.__name__))
     if not isinstance(return_type, type):
-        raise BadProviderError("%s \"%s\" return type annotation \"%s\" is not a type" %
-                               (provider_type, provider_method.__name__, return_type))
+        if NEW_TYPING and not isinstance(return_type, _GenericAlias):
+            raise BadProviderError("%s \"%s\" return type annotation \"%s\" is not a type" %
+                                   (provider_type, provider_method.__name__, return_type))
 
     return return_type
 
@@ -519,9 +527,9 @@ def class_provider(provided_dependency_name: _Name = None,
             raise BadProviderError("Class provider \"%s\" %s" % (provider_method.__name__, err))
 
         return_type = _get_provider_return_type(provider_method, "Class provider")  # type: Any
-        if not hasattr(return_type, "__origin__") or return_type.__origin__ is not InjectableClass:
+        if not hasattr(return_type, "__origin__") or return_type.__origin__ is not type:
             raise BadProviderError("Class provider \"%s\"'s return type annotation \"%s\" is not "
-                                   "of the form InjectableClass[...]" %
+                                   "of the form Type[...]" %
                                    (provider_method.__name__, return_type))
 
         # noinspection PyCallingNonCallable

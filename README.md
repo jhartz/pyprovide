@@ -150,13 +150,12 @@ instance providers and class providers). The mapping can contain 2 kinds of entr
     providers). Class providers return class objects themselves, rather than instances of classes.
 
     ```python
-    # NOTE: "InjectableClassType" isn't actually used, but it needs to be imported if you want
-    # your program to type-check properly.
-    from pyprovide import InjectableClass, InjectableClassType, Module, class_provider, provider
+    from typing import Type
+    from pyprovide import Module, class_provider, provider
 
     class MyModule(Module):
         @class_provider()
-        def provide_class_a(self) -> InjectableClass[ClassA]:
+        def provide_class_a(self) -> Type[ClassA]:
             return SubclassOfClassA
 
         # That class provider above is equivalent to:
@@ -167,7 +166,7 @@ instance providers and class providers). The mapping can contain 2 kinds of entr
     ```
 
     The return type annotation of a class provider is the class that it provides, wrapped in
-    `InjectableClass` (which is just an alias for `Callable[..., T]`).
+    `Type`.
 
     Also, remember that the return type annotation of the provider is used when mapping the
     provider in the registry; the provider method itself is free to return an instance of a
@@ -177,7 +176,8 @@ instance providers and class providers). The mapping can contain 2 kinds of entr
     or `@class_provider()`:
 
     ```python
-    from pyprovide import InjectableClass, InjectableClassType, Module, class_provider, provider
+    from typing import Type
+    from pyprovide import Module, class_provider, provider
 
     class MyModule(Module):
         @provider("ClassZ in color")
@@ -187,7 +187,7 @@ instance providers and class providers). The mapping can contain 2 kinds of entr
             return class_z
 
         @class_provider("ClassZ in black-and-white")
-        def provide_class_z_bw(self) -> InjectableClass[ClassZ]:
+        def provide_class_z_bw(self) -> Type[ClassZ]:
             return ClassZ
     ```
 
