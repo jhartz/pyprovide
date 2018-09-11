@@ -469,6 +469,7 @@ def _get_provider_return_type(provider_method: _ProviderMethod, provider_type: s
     if return_type is inspect.Signature.empty:
         raise BadProviderError("%s \"%s\" missing return type annotation" %
                                (provider_type, provider_method.__name__))
+    # TODO: Find a cleaner way to do this check
     if not isinstance(return_type, type):
         if NEW_TYPING and not isinstance(return_type, _GenericAlias):
             raise BadProviderError("%s \"%s\" return type annotation \"%s\" is not a type" %
@@ -527,6 +528,7 @@ def class_provider(provided_dependency_name: _Name = None,
             raise BadProviderError("Class provider \"%s\" %s" % (provider_method.__name__, err))
 
         return_type = _get_provider_return_type(provider_method, "Class provider")  # type: Any
+        # TODO: Find a cleaner way to do this check
         if not hasattr(return_type, "__origin__") or return_type.__origin__ is not type:
             raise BadProviderError("Class provider \"%s\"'s return type annotation \"%s\" is not "
                                    "of the form Type[...]" %
