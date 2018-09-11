@@ -12,6 +12,7 @@ from pyprovide import \
     InjectableClass, InjectableClassType, \
     Injector, Module, \
     class_provider, inject, provider
+from typing import Type
 
 
 ###################################################################################################
@@ -89,7 +90,7 @@ class ExampleModuleWithInstanceProviders(Module):
         return class_c
 
 
-class ExampleModuleWithClassProviders(Module):
+class ExampleModuleWithLegacyClassProviders(Module):
     @class_provider()
     def provide_example_class(self) -> InjectableClass[ExampleClass]:
         return ExampleSubclass
@@ -104,6 +105,31 @@ class ExampleModuleWithClassProviders(Module):
     @class_provider("Named Class C", class_a="Named Class A")
     def provide_named_class_c(self, example_class: ExampleClass, class_a: ExampleClassA,
                               class_b: ExampleClassB) -> InjectableClass[ExampleClassC]:
+        assert isinstance(example_class, ExampleClass)
+        assert isinstance(class_a, ExampleClassA)
+        assert hasattr(class_a, "is_the_named_one")
+        assert isinstance(class_b, ExampleClassB)
+        class SubclassOfExampleClassC(ExampleClassC):
+            pass
+        SubclassOfExampleClassC.is_the_named_one = True
+        return SubclassOfExampleClassC
+
+
+class ExampleModuleWithClassProviders(Module):
+    @class_provider()
+    def provide_example_class(self) -> Type[ExampleClass]:
+        return ExampleSubclass
+
+    @class_provider("Named Class A")
+    def provide_named_class_a(self) -> Type[ExampleClassA]:
+        class SubclassOfExampleClassA(ExampleClassA):
+            pass
+        SubclassOfExampleClassA.is_the_named_one = True
+        return SubclassOfExampleClassA
+
+    @class_provider("Named Class C", class_a="Named Class A")
+    def provide_named_class_c(self, example_class: ExampleClass, class_a: ExampleClassA,
+                              class_b: ExampleClassB) -> Type[ExampleClassC]:
         assert isinstance(example_class, ExampleClass)
         assert isinstance(class_a, ExampleClassA)
         assert hasattr(class_a, "is_the_named_one")
@@ -196,7 +222,7 @@ class TestProviderErrors(unittest.TestCase):
 
         self.assertRegex(str(assertion.exception),
                          r'return type annotation .* is not of the form '
-                         r'InjectableClass\[\.\.\.\]$')
+                         r'Type\[\.\.\.\]$')
 
     def test_instance_provider_without_param_types(self):
         with self.assertRaises(BadProviderError) as assertion:
@@ -212,8 +238,7 @@ class TestProviderErrors(unittest.TestCase):
         with self.assertRaises(BadProviderError) as assertion:
             class TestModule(Module):
                 @class_provider()
-                def provider_without_param_types(self, what, am, i) -> \
-                        InjectableClass[ExampleClass]:
+                def provider_without_param_types(self, what, am, i) -> Type[ExampleClass]:
                     pass
 
         self.assertIn("missing type hint annotation for parameters: ['what', 'am', 'i']",
@@ -233,8 +258,7 @@ class TestProviderErrors(unittest.TestCase):
         with self.assertRaises(BadProviderError) as assertion:
             class TestModule(Module):
                 @class_provider()
-                def provider_with_invalid_param_type(self, dep: 42) -> \
-                        InjectableClass[ExampleClass]:
+                def provider_with_invalid_param_type(self, dep: 42) -> Type[ExampleClass]:
                     pass
 
         self.assertIn("has parameters whose annotations are not types: ['dep']",
@@ -255,7 +279,7 @@ class TestProviderErrors(unittest.TestCase):
             class TestModule(Module):
                 @class_provider(class_a="This one's real", class_b="Not actually a parameter")
                 def provider_with_invalid_named_deps(self, class_a: ExampleClassA) -> \
-                        InjectableClass[ExampleClass]:
+                        Type[ExampleClass]:
                     pass
 
         self.assertIn("has named dependencies that don't correspond to a parameter: ['class_b']",
@@ -318,7 +342,7 @@ class TestDependencyErrors(unittest.TestCase):
     def test_class_provider_returned_non_type(self):
         class TestModule(Module):
             @class_provider()
-            def provide_example_class(self) -> InjectableClass[ExampleClass]:
+            def provide_example_class(self) -> Type[ExampleClass]:
                 return 42
 
         injector = Injector(TestModule())
@@ -330,7 +354,7 @@ class TestDependencyErrors(unittest.TestCase):
     def test_class_provider_returned_non_decorated_class(self):
         class TestModule(Module):
             @class_provider()
-            def provide_example_class(self) -> InjectableClass[ExampleClass]:
+            def provide_example_class(self) -> Type[ExampleClass]:
                 return ExampleClass
 
         injector = Injector(TestModule())
@@ -462,11 +486,11 @@ class TestInjectionWithProviders(unittest.TestCase):
 
         class TestModule(Module):
             @class_provider()
-            def provide_class_1(self) -> InjectableClass[Class1]:
+            def provide_class_1(self) -> Type[Class1]:
                 return Class2
 
             @class_provider("class 1 named directly")
-            def provide_class_1_named(self) -> InjectableClass[Class1]:
+            def provide_class_1_named(self) -> Type[Class1]:
                 return Class1
 
         injector_with_module = Injector(TestModule())
